@@ -39,7 +39,13 @@ const DEFAULT_PROFILE = () => ({
   },
   lastActivity: null,
   streakDays: 0,
-  lastStreakDate: null
+  lastStreakDate: null,
+  streaks: {
+    questCurrent: 0,
+    questLongest: 0,
+    testCurrent: 0
+  },
+  lastQuestDay: null
 });
 
 const XP_VALUES = {
@@ -122,6 +128,11 @@ function normalizeProfile(profile) {
   };
   normalized.achievements = profile.achievements || [];
   normalized.questMode = profile.questMode ?? false;
+  normalized.streaks = {
+    ...DEFAULT_PROFILE().streaks,
+    ...(profile.streaks || {})
+  };
+  normalized.lastQuestDay = profile.lastQuestDay ?? null;
   return normalized;
 }
 
@@ -209,6 +220,70 @@ function updateStreak(profile, now = new Date()) {
   profile.lastStreakDate = today;
 }
 
+function updateQuestStreak(profile, now = new Date()) {
+  if (!profile.questMode) {
+    return { updated: false, current: profile.streaks.questCurrent };
+  }
+  const today = now.toISOString().slice(0, 10);
+  if (!profile.lastQuestDay) {
+    profile.lastQuestDay = today;
+    profile.streaks.questCurrent = 1;
+  } else if (profile.lastQuestDay !== today) {
+    const lastDate = new Date(profile.lastQuestDay);
+    const diffDays = Math.floor(
+      (new Date(today).getTime() - lastDate.getTime()) / (24 * 60 * 60 * 1000)
+    );
+    if (diffDays === 1) {
+      profile.streaks.questCurrent += 1;
+    } else {
+      profile.streaks.questCurrent = 1;
+    }
+    profile.lastQuestDay = today;
+  } else {
+    return { updated: false, current: profile.streaks.questCurrent };
+  }
+  if (profile.streaks.questCurrent > profile.streaks.questLongest) {
+    profile.streaks.questLongest = profile.streaks.questCurrent;
+  }
+  return { updated: true, current: profile.streaks.questCurrent };
+}
+
+function updateTestStreak(profile, action) {
+  if (!profile.questMode) {
+    if (profile.streaks.testCurrent !== 0) {
+      profile.streaks.testCurrent = 0;
+    }
+    return { updated: false, current: profile.streaks.testCurrent };
+  }
+  if (action !== 'test') {
+    return { updated: false, current: profile.streaks.testCurrent };
+  }
+  profile.streaks.testCurrent += 1;
+  return { updated: true, current: profile.streaks.testCurrent };
+}
+
+function resetTestStreak(profile) {
+  if (profile.streaks.testCurrent !== 0) {
+    profile.streaks.testCurrent = 0;
+    return true;
+  }
+  return false;
+}
+
+function getDurationBonus(durationMs) {
+  const minutes = durationMs / 60000;
+  if (minutes >= 15) {
+    return 100;
+  }
+  if (minutes >= 5) {
+    return 50;
+  }
+  if (minutes >= 2) {
+    return 25;
+  }
+  return 0;
+}
+
 function getSessionSummary(profile) {
   if (!profile.sessionStart) {
     return null;
@@ -231,6 +306,9 @@ async function awardXP(action, context = {}) {
   const profile = await getProfile();
   const sessionStarted = startSessionIfNeeded(profile, now);
   const previousLevel = profile.level;
+  const durationMs = context.durationMs || 0;
+  const durationBonus =
+    profile.questMode && durationMs > 0 ? getDurationBonus(durationMs) : 0;
 
   profile.totalXp += xpValue;
   profile.sessionXp += xpValue;
@@ -244,6 +322,13 @@ async function awardXP(action, context = {}) {
   }
 
   updateStreak(profile, now);
+  const questStreak = updateQuestStreak(profile, now);
+  const testStreak = updateTestStreak(profile, action);
+
+  if (durationBonus > 0) {
+    profile.totalXp += durationBonus;
+    profile.sessionXp += durationBonus;
+  }
 
   const levelInfo = getLevelFromTotalXp(profile.totalXp);
   profile.level = levelInfo.level;
@@ -255,10 +340,16 @@ async function awardXP(action, context = {}) {
     profile.class = profile.class || 'Adventurer';
   }
 
-  const newlyUnlocked = evaluateAchievements(profile, {
+  const achievementProfile = {
+    ...profile,
+    totalXp: profile.totalXp - durationBonus
+  };
+  const newlyUnlocked = evaluateAchievements(achievementProfile, {
     ...context,
     now,
-    action
+    action,
+    durationBonus,
+    questStreakCurrent: profile.streaks.questCurrent
   });
   profile.achievements = [...profile.achievements, ...newlyUnlocked];
 
@@ -267,12 +358,54 @@ async function awardXP(action, context = {}) {
   return {
     awarded: true,
     xp: xpValue,
+    durationBonus,
     level: profile.level,
     previousLevel,
     xpToNext: getXpForLevel(profile.level),
     currentXp: profile.xp,
     sessionStarted,
-    achievements: newlyUnlocked
+    achievements: newlyUnlocked,
+    questStreak,
+    testStreak
+  };
+}
+
+async function awardDurationBonus(durationMs, context = {}) {
+  const now = context.now || new Date();
+  const profile = await getProfile();
+  if (!profile.questMode) {
+    return { awarded: false, reason: 'quest-off' };
+  }
+  const durationBonus = getDurationBonus(durationMs);
+  if (durationBonus === 0) {
+    return { awarded: false, reason: 'no-bonus' };
+  }
+  const sessionStarted = startSessionIfNeeded(profile, now);
+  const previousLevel = profile.level;
+
+  profile.totalXp += durationBonus;
+  profile.sessionXp += durationBonus;
+  profile.updatedAt = now.toISOString();
+  profile.lastActivity = profile.updatedAt;
+
+  const levelInfo = getLevelFromTotalXp(profile.totalXp);
+  profile.level = levelInfo.level;
+  profile.xp = levelInfo.xp;
+
+  try {
+    profile.class = await detectClass(profile, context.repoPath || process.cwd());
+  } catch (error) {
+    profile.class = profile.class || 'Adventurer';
+  }
+
+  await saveProfile(profile);
+
+  return {
+    awarded: true,
+    durationBonus,
+    level: profile.level,
+    previousLevel,
+    sessionStarted
   };
 }
 
@@ -280,9 +413,11 @@ export {
   getProfile,
   saveProfile,
   awardXP,
+  awardDurationBonus,
   getXpForLevel,
   startSessionIfNeeded,
   endSession,
   getSessionSummary,
-  isSessionExpired
+  isSessionExpired,
+  resetTestStreak
 };
