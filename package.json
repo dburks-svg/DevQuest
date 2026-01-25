@@ -1,0 +1,25 @@
+{
+  "name": "devquest",
+  "version": "0.1.0",
+  "description": "A gamified terminal wrapper that rewards real development work with XP, levels, and achievements",
+  "type": "module",
+  "bin": {
+    "devquest": "./bin/devquest.js"
+  },
+  "scripts": {
+    "start": "node bin/devquest.js"
+  },
+  "keywords": [
+    "cli",
+    "gamification",
+    "terminal",
+    "xp",
+    "achievements",
+    "dnd"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
