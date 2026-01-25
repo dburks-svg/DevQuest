@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "description": "A gamified terminal wrapper that rewards real development work with XP, levels, and achievements",
   "type": "module",
-  "main": "src/commands.js",
   "bin": {
     "devquest": "./bin/devquest.js"
   },

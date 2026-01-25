@@ -16,3 +16,4 @@ if (args.length === 0) {
 
 // Placeholder for command handling
 console.log(`\nCommand "${args[0]}" not yet implemented`);
+process.exit(1);
