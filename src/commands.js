@@ -4,7 +4,8 @@ import {
   getXpForLevel,
   startSessionIfNeeded,
   endSession,
-  getSessionSummary
+  getSessionSummary,
+  resetTestStreak
 } from './xp.js';
 import { detectClass } from './class.js';
 import {
@@ -97,6 +98,7 @@ async function questOff() {
     return;
   }
   profile.questMode = false;
+  resetTestStreak(profile);
   const summary = getSessionSummary(profile);
   if (summary) {
     console.log(renderSessionSummary(summary));

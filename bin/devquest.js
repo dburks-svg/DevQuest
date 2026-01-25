@@ -3,11 +3,13 @@
 import { spawn } from 'child_process';
 import {
   awardXP,
+  awardDurationBonus,
   getProfile,
   saveProfile,
   getSessionSummary,
   endSession,
-  isSessionExpired
+  isSessionExpired,
+  resetTestStreak
 } from '../src/xp.js';
 import {
   sessionStartBanner,
@@ -105,6 +107,7 @@ async function runBuiltIn(command, args) {
 
 async function runWrappedCommand(args) {
   const action = detectAction(args);
+  const startTime = Date.now();
   const child = spawn(args[0], args.slice(1), {
     stdio: 'inherit',
     shell: process.platform === 'win32'
@@ -123,8 +126,10 @@ async function runWrappedCommand(args) {
   }
 
   if (code === 0 && action) {
+    const durationMs = Date.now() - startTime;
     const result = await awardXP(action, {
       now: new Date(),
+      durationMs,
       repoPath: process.cwd(),
       commitMessage: action === 'commit' ? extractCommitMessage(args) : ''
     });
@@ -144,7 +149,42 @@ async function runWrappedCommand(args) {
     result.achievements.forEach((achievement) => {
       console.log(achievementPopup(achievement));
     });
+    const bonusMessages = [];
+    if (result.durationBonus > 0) {
+      bonusMessages.push(`⏳ Endurance bonus: +${result.durationBonus} XP`);
+    }
+    if (result.testStreak?.updated) {
+      bonusMessages.push(`🔥 Test streak: ${result.testStreak.current}`);
+    }
+    if (result.questStreak?.updated) {
+      bonusMessages.push(`📅 Quest streak: ${result.questStreak.current} days`);
+    }
+    if (bonusMessages.length > 0) {
+      console.log(bonusMessages.join(' · '));
+    }
+  } else if (code === 0) {
+    const durationMs = Date.now() - startTime;
+    const result = await awardDurationBonus(durationMs, {
+      now: new Date(),
+      repoPath: process.cwd()
+    });
+    if (result.sessionStarted) {
+      console.log(sessionStartBanner());
+    }
+    if (result.awarded) {
+      console.log(`⏳ Endurance bonus: +${result.durationBonus} XP`);
+      if (result.level > result.previousLevel) {
+        console.log(levelUpMessage(result.level));
+      }
+    }
   } else if (code !== 0) {
+    if (action === 'test') {
+      const profile = await getProfile();
+      if (resetTestStreak(profile)) {
+        profile.updatedAt = new Date().toISOString();
+        await saveProfile(profile);
+      }
+    }
     console.log(failureMessage(action));
   }
 

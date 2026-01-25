@@ -41,6 +41,14 @@ const ACHIEVEMENTS = [
     check: (profile) => profile.streakDays >= 7
   },
   {
+    id: 'Marathon Runner',
+    check: (_profile, context) => (context.durationBonus || 0) >= 100
+  },
+  {
+    id: 'Steady Builder',
+    check: (profile) => (profile.streaks?.questCurrent || 0) >= 7
+  },
+  {
     id: 'Bug Hunter',
     check: (_profile, context) => {
       if (context.action !== 'commit') {

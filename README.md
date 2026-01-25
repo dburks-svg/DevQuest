@@ -1,17 +1,6 @@
 # DevQuest
 
-A gamified terminal wrapper that rewards real development work with XP, levels, and achievements.
-
-## Overview
-
-DevQuest transforms your development workflow into an RPG experience. Track your progress, earn experience points, level up your developer class, and unlock achievements as you work on real projects.
-
-## Features (Coming Soon)
-
-- **XP System**: Earn experience points for commits, builds, tests, and other development activities
-- **Classes & Levels**: Progress through developer classes with unique abilities and perks
-- **Achievements**: Unlock achievements for milestones and accomplishments
-- **D&D Theme**: Immersive D&D-inspired flavor text and styling
+DevQuest is a gamified terminal wrapper for real development work. It adds light RPG flavor and rewards for successful commands, with an ADHD-friendly focus on momentum: minimal friction, no extra prompts, and no noisy output unless you opt in. It runs commands exactly as you would run them, and only adds XP and progress tracking when it is safe to do so.
 
 ## Installation
 
@@ -19,27 +8,58 @@ DevQuest transforms your development workflow into an RPG experience. Track your
 npm install -g devquest
 ```
 
-## Usage
+Or, for local development:
 
 ```bash
-devquest <command> [options]
+npm link
 ```
 
-## Development
+## Quest Mode (opt-in)
 
-This project is in early development. The core structure is in place, but commands and features are not yet implemented.
+Quest Mode is an optional, opt-in session mode that enables XP rewards, endurance bonuses, and streak tracking.
 
-### Project Structure
+Turn it on and off:
 
+```bash
+devquest quest on
+devquest quest off
 ```
-DevQuest/
-├── bin/
-│   └── devquest.js      # CLI entry point
-├── src/
-│   ├── xp.js            # XP management
-│   ├── class.js         # Class and leveling system
-│   ├── achievements.js  # Achievement tracking
-│   ├── theme-dnd.js     # D&D theming
-│   └── commands.js      # Command handlers
-└── package.json
+
+Check status:
+
+```bash
+devquest quest status
 ```
+
+## XP Rules (high level)
+
+- XP is awarded only when wrapped commands succeed (exit code 0).
+- No XP is awarded on failures.
+- In Quest Mode, long-running successful commands earn a duration bonus:
+  - 2+ minutes: +25 XP
+  - 5+ minutes: +50 XP
+  - 15+ minutes: +100 XP
+
+## Streaks
+
+- **Quest streak (daily)**: Counts a day when Quest Mode is ON and you earn XP from at least one successful action. It increments once per calendar day and resets if you miss a day.
+- **Test streak (per quest)**: Counts consecutive successful test actions within a single Quest Mode session. It resets on test failure or when Quest Mode is turned off.
+
+## Usage Examples
+
+```bash
+devquest quest on
+devquest npm test
+devquest quest status
+devquest quest off
+```
+
+## Safety Guarantees
+
+- Commands run unmodified.
+- Exit codes are preserved.
+- Interactive commands work normally.
+
+## Local-first
+
+DevQuest is free and local-first. Your progress is stored on your machine, and there is no required account or external service.
