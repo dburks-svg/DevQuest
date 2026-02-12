@@ -75,6 +75,10 @@ function helpText() {
     chalk.white('devquest reset-session') + chalk.gray(' Clear session counters'),
     chalk.white('devquest help') + chalk.gray('  Show usage'),
     '',
+    chalk.white('devquest quest on') + chalk.gray('  Enable Quest Mode, start session'),
+    chalk.white('devquest quest off') + chalk.gray(' Disable Quest Mode, show summary'),
+    chalk.white('devquest quest status') + chalk.gray(' Show quest mode status'),
+    '',
     chalk.gray('Wrap any command to earn XP on success, e.g. devquest git commit -m "fix"')
   ].join('\n');
 }
