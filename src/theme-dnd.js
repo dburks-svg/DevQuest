@@ -84,7 +84,6 @@ function helpText() {
 }
 
 export {
-  renderProgressBar,
   sessionStartBanner,
   questModeOnBanner,
   questModeOffMessage,

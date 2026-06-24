@@ -50,11 +50,20 @@ function detectAction(args) {
 }
 
 function extractCommitMessage(args) {
-  const messageIndex = args.findIndex((arg) => arg === '-m' || arg === '--message');
-  if (messageIndex === -1 || messageIndex + 1 >= args.length) {
-    return '';
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === '-m' || arg === '--message') {
+      return args[i + 1] || '';
+    }
+    if (arg.startsWith('-m') && arg.length > 2) {
+      return arg.slice(2); // -m"msg" arrives as -mmsg after the shell strips quotes
+    }
+    if (arg.startsWith('--message=')) {
+      return arg.slice('--message='.length);
+    }
   }
-  return args[messageIndex + 1];
+  // Editor-based commits (no -m/-F) have no message on the command line.
+  return '';
 }
 
 async function maybeHandleExpiredSession() {
@@ -121,74 +130,90 @@ async function runWrappedCommand(args) {
   });
 
   if (signal) {
-    process.kill(process.pid, signal);
-    return;
+    // Re-raising a POSIX signal lets the parent reflect the child's termination
+    // cause. Windows has no real signals, so just exit non-zero instead.
+    if (process.platform !== 'win32') {
+      process.kill(process.pid, signal);
+      return;
+    }
+    process.exit(1);
   }
 
-  if (code === 0 && action) {
-    const durationMs = Date.now() - startTime;
-    const result = await awardXP(action, {
-      now: new Date(),
-      durationMs,
-      repoPath: process.cwd(),
-      commitMessage: action === 'commit' ? extractCommitMessage(args) : ''
-    });
+  try {
+    if (code === 0 && action) {
+      const durationMs = Date.now() - startTime;
+      const result = await awardXP(action, {
+        now: new Date(),
+        durationMs,
+        repoPath: process.cwd(),
+        commitMessage: action === 'commit' ? extractCommitMessage(args) : ''
+      });
 
-    if (result.sessionStarted) {
-      console.log(sessionStartBanner());
-    }
+      if (result.sessionStarted) {
+        console.log(sessionStartBanner());
+      }
 
-    if (result.awarded) {
-      console.log(xpGainMessage(action, result.xp));
-    }
+      if (result.awarded) {
+        console.log(xpGainMessage(action, result.xp));
+      }
 
-    if (result.level > result.previousLevel) {
-      console.log(levelUpMessage(result.level));
-    }
-
-    result.achievements.forEach((achievement) => {
-      console.log(achievementPopup(achievement));
-    });
-    const bonusMessages = [];
-    if (result.durationBonus > 0) {
-      bonusMessages.push(`⏳ Endurance bonus: +${result.durationBonus} XP`);
-    }
-    if (result.testStreak?.updated) {
-      bonusMessages.push(`🔥 Test streak: ${result.testStreak.current}`);
-    }
-    if (result.questStreak?.updated) {
-      bonusMessages.push(`📅 Quest streak: ${result.questStreak.current} days`);
-    }
-    if (bonusMessages.length > 0) {
-      console.log(bonusMessages.join(' · '));
-    }
-  } else if (code === 0) {
-    const durationMs = Date.now() - startTime;
-    const result = await awardDurationBonus(durationMs, {
-      now: new Date(),
-      repoPath: process.cwd()
-    });
-    if (result.sessionStarted) {
-      console.log(sessionStartBanner());
-    }
-    if (result.awarded) {
-      console.log(`⏳ Endurance bonus: +${result.durationBonus} XP`);
       if (result.level > result.previousLevel) {
         console.log(levelUpMessage(result.level));
       }
-    }
-  } else if (code !== 0) {
-    if (action === 'test') {
-      const profile = await getProfile();
-      if (resetTestStreak(profile)) {
-        profile.updatedAt = new Date().toISOString();
-        await saveProfile(profile);
-      }
-    }
-    console.log(failureMessage(action));
-  }
 
-  process.exit(code);
+      result.achievements.forEach((achievement) => {
+        console.log(achievementPopup(achievement));
+      });
+      const bonusMessages = [];
+      if (result.durationBonus > 0) {
+        bonusMessages.push(`⏳ Endurance bonus: +${result.durationBonus} XP`);
+      }
+      if (result.testStreak?.updated) {
+        bonusMessages.push(`🔥 Test streak: ${result.testStreak.current}`);
+      }
+      if (result.questStreak?.updated) {
+        bonusMessages.push(`📅 Quest streak: ${result.questStreak.current} days`);
+      }
+      if (bonusMessages.length > 0) {
+        console.log(bonusMessages.join(' · '));
+      }
+    } else if (code === 0) {
+      const durationMs = Date.now() - startTime;
+      const result = await awardDurationBonus(durationMs, {
+        now: new Date(),
+        repoPath: process.cwd()
+      });
+      if (result.sessionStarted) {
+        console.log(sessionStartBanner());
+      }
+      if (result.awarded) {
+        console.log(`⏳ Endurance bonus: +${result.durationBonus} XP`);
+        if (result.level > result.previousLevel) {
+          console.log(levelUpMessage(result.level));
+        }
+        (result.achievements || []).forEach((achievement) => {
+          console.log(achievementPopup(achievement));
+        });
+        if (result.questStreak?.updated) {
+          console.log(`📅 Quest streak: ${result.questStreak.current} days`);
+        }
+      }
+    } else if (code !== 0) {
+      if (action === 'test') {
+        const profile = await getProfile();
+        if (resetTestStreak(profile)) {
+          profile.updatedAt = new Date().toISOString();
+          await saveProfile(profile);
+        }
+      }
+      console.log(failureMessage(action));
+    }
+  } catch (error) {
+    // XP bookkeeping must never change the outcome of the user's command.
+    console.error(`devquest: could not record progress (${error.message})`);
+  } finally {
+    process.exit(code);
+  }
 }
 
 async function main() {

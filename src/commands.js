@@ -20,7 +20,7 @@ async function showStatus() {
   const profile = await getProfile();
   try {
     profile.class = await detectClass(profile, process.cwd());
-  } catch (error) {
+  } catch {
     profile.class = profile.class || 'Adventurer';
   }
   profile.updatedAt = new Date().toISOString();

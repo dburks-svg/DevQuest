@@ -62,7 +62,7 @@ function parseGitLog(repoPath) {
     }
 
     return commits;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -99,8 +99,16 @@ function ratio(part, total) {
   return total === 0 ? 0 : part / total;
 }
 
-async function detectClass(profile, repoPath) {
-  const commits = parseGitLog(repoPath);
+// A category at or above this share claims its class; below it you are a
+// generalist (Full Stack Druid). One cutoff means no "dead zone" where a clear
+// leader is ignored and the stale previous class is kept.
+const CLASS_THRESHOLD = 0.4;
+
+// Pure scoring: given parsed commits and the profile's action stats, pick a class.
+// Every signal is normalized against the SAME denominator (total tracked actions,
+// falling back to commit count) so the ratios are directly comparable. Counts are
+// clamped so a signal can never exceed its denominator.
+function classifyCommits(commits, profile) {
   if (!commits || commits.length === 0) {
     return 'Adventurer';
   }
@@ -120,60 +128,43 @@ async function detectClass(profile, repoPath) {
     if (classified.hasDbFile) dbCommits += 1;
   });
 
-  const totalCommits = commits.length;
+  const stats = profile.stats || {};
   const totalActions =
-    profile.stats.commits +
-    profile.stats.tests +
-    profile.stats.deploys +
-    profile.stats.pushes +
-    profile.stats.merges;
+    (stats.commits || 0) +
+    (stats.tests || 0) +
+    (stats.deploys || 0) +
+    (stats.pushes || 0) +
+    (stats.merges || 0);
+  const denom = totalActions > 0 ? totalActions : commits.length;
+  const share = (count) => ratio(Math.min(count, denom), denom);
 
-  const bugRatio = ratio(bugCommits, totalCommits);
-  const refactorRatio = ratio(refactorCommits, totalCommits);
-  const uiRatio = ratio(uiCommits, totalCommits);
-  const backendRatio = ratio(backendCommits, totalCommits);
-  const dbRatio = ratio(dbCommits, totalCommits);
-  const testRatio = ratio(profile.stats.tests, totalActions);
-  const deployRatio = ratio(profile.stats.deploys, totalActions);
-
-  const categoryRatios = [
-    bugRatio,
-    refactorRatio,
-    uiRatio,
-    backendRatio,
-    dbRatio,
-    testRatio,
-    deployRatio
+  // Ordered by priority so ties resolve the same way the original chain did.
+  const categories = [
+    { name: 'Debug Dragon', value: share(bugCommits) },
+    { name: 'Test Cleric', value: share(stats.tests || 0) },
+    { name: 'Frontend Mage', value: share(uiCommits) },
+    { name: 'Backend Warrior', value: share(backendCommits) },
+    { name: 'DevOps Warlock', value: share(stats.deploys || 0) },
+    { name: 'Database Paladin', value: share(dbCommits) },
+    { name: 'Refactor Monk', value: share(refactorCommits) }
   ];
 
-  if (bugRatio >= 0.4) return 'Debug Dragon';
-  if (testRatio >= 0.4) return 'Test Cleric';
-  if (uiRatio >= 0.4) return 'Frontend Mage';
-  if (backendRatio >= 0.4) return 'Backend Warrior';
-  if (deployRatio >= 0.4) return 'DevOps Warlock';
-  if (dbRatio >= 0.4) return 'Database Paladin';
-  if (refactorRatio >= 0.4) return 'Refactor Monk';
+  const leader = categories.reduce(
+    (best, category) => (category.value > best.value ? category : best),
+    categories[0]
+  );
 
-  const maxRatio = Math.max(...categoryRatios);
-  if (maxRatio <= 0.35) return 'Full Stack Druid';
-
-  return profile.class || 'Adventurer';
-}
-
-function shouldEvolve(profile) {
-  return profile.level >= 20;
-}
-
-function getEvolutionOptions(profile) {
-  if (!shouldEvolve(profile)) {
-    return [];
+  // Clear specialist wins; otherwise a generalist. The former 0.35-0.40 band
+  // that returned a stale class no longer exists.
+  if (leader.value >= CLASS_THRESHOLD) {
+    return leader.name;
   }
-  const baseClass = profile.class || 'Adventurer';
-  return [
-    `${baseClass} Ascendant`,
-    `${baseClass} Mythic`,
-    `${baseClass} Paragon`
-  ];
+  return 'Full Stack Druid';
 }
 
-export { detectClass, shouldEvolve, getEvolutionOptions };
+async function detectClass(profile, repoPath) {
+  const commits = parseGitLog(repoPath);
+  return classifyCommits(commits, profile);
+}
+
+export { detectClass, classifyCommits };

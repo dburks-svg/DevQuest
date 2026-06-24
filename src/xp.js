@@ -4,10 +4,20 @@ import os from 'os';
 import { evaluateAchievements } from './achievements.js';
 import { detectClass } from './class.js';
 
-const PROFILE_DIR = path.join(os.homedir(), '.devquest');
-const PROFILE_PATH = path.join(PROFILE_DIR, 'profile.json');
-const PROFILE_TMP_PATH = path.join(PROFILE_DIR, 'profile.json.tmp');
-const PROFILE_LOCK_PATH = path.join(PROFILE_DIR, 'profile.lock');
+// Profile location is resolved lazily so DEVQUEST_HOME can redirect it (used by
+// tests and anyone who wants an isolated profile) without touching the real
+// ~/.devquest. Reading the env per call also means a changed env is honored.
+function profilePaths() {
+  const dir = process.env.DEVQUEST_HOME
+    ? path.resolve(process.env.DEVQUEST_HOME)
+    : path.join(os.homedir(), '.devquest');
+  return {
+    dir,
+    file: path.join(dir, 'profile.json'),
+    tmp: path.join(dir, 'profile.json.tmp'),
+    lock: path.join(dir, 'profile.lock')
+  };
+}
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const LOCK_STALE_MS = 10 * 1000;
 
@@ -69,14 +79,15 @@ function sleep(ms) {
 }
 
 async function ensureProfileDir() {
-  await fs.mkdir(PROFILE_DIR, { recursive: true });
+  await fs.mkdir(profilePaths().dir, { recursive: true });
 }
 
 async function acquireLock() {
   await ensureProfileDir();
+  const { lock } = profilePaths();
   for (let attempt = 0; attempt < 10; attempt += 1) {
     try {
-      const handle = await fs.open(PROFILE_LOCK_PATH, 'wx');
+      const handle = await fs.open(lock, 'wx');
       await handle.close();
       return;
     } catch (error) {
@@ -84,10 +95,11 @@ async function acquireLock() {
         throw error;
       }
       try {
-        const stats = await fs.stat(PROFILE_LOCK_PATH);
+        const stats = await fs.stat(lock);
         const age = Date.now() - stats.mtimeMs;
         if (age > LOCK_STALE_MS) {
-          await fs.unlink(PROFILE_LOCK_PATH);
+          // Only remove a lock that is demonstrably stale.
+          await fs.unlink(lock);
           continue;
         }
       } catch (statError) {
@@ -98,11 +110,15 @@ async function acquireLock() {
       await sleep(200);
     }
   }
-  await fs.unlink(PROFILE_LOCK_PATH).catch(() => {});
+  // Retries exhausted against a live lock. Do NOT delete it and proceed: that
+  // would clobber the holder's write. Fail loudly so the caller can degrade.
+  throw new Error(
+    'devquest: could not acquire profile lock; another devquest process may be running'
+  );
 }
 
 async function releaseLock() {
-  await fs.unlink(PROFILE_LOCK_PATH).catch(() => {});
+  await fs.unlink(profilePaths().lock).catch(() => {});
 }
 
 function getXpForLevel(level) {
@@ -137,8 +153,9 @@ function normalizeProfile(profile) {
 }
 
 async function readProfileFile() {
+  const { file, dir } = profilePaths();
   try {
-    const data = await fs.readFile(PROFILE_PATH, 'utf8');
+    const data = await fs.readFile(file, 'utf8');
     return JSON.parse(data);
   } catch (error) {
     if (error.code === 'ENOENT') {
@@ -146,11 +163,13 @@ async function readProfileFile() {
     }
     if (error instanceof SyntaxError) {
       await ensureProfileDir();
-      const backupPath = path.join(
-        PROFILE_DIR,
-        `profile.json.bak.${Date.now()}`
+      const backupPath = path.join(dir, `profile.json.bak.${Date.now()}`);
+      await fs.rename(file, backupPath).catch(() => {});
+      // Tell the user their progress was reset and where to recover it, instead
+      // of silently starting over.
+      console.error(
+        `devquest: profile.json was corrupt and has been reset. A backup was saved to ${backupPath}`
       );
-      await fs.rename(PROFILE_PATH, backupPath).catch(() => {});
       return null;
     }
     throw error;
@@ -167,9 +186,10 @@ async function saveProfile(profile) {
   await acquireLock();
   try {
     await ensureProfileDir();
+    const { file, tmp } = profilePaths();
     const payload = JSON.stringify(profile, null, 2);
-    await fs.writeFile(PROFILE_TMP_PATH, payload, 'utf8');
-    await fs.rename(PROFILE_TMP_PATH, PROFILE_PATH);
+    await fs.writeFile(tmp, payload, 'utf8');
+    await fs.rename(tmp, file);
   } finally {
     await releaseLock();
   }
@@ -198,8 +218,18 @@ function endSession(profile) {
   profile.sessionActions = { ...DEFAULT_PROFILE().sessionActions };
 }
 
+// Day key in LOCAL time (YYYY-MM-DD). Streaks roll over at the user's local
+// midnight, consistent with the time-of-day achievement checks (getHours/getDay),
+// rather than at UTC midnight.
+function localDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function updateStreak(profile, now = new Date()) {
-  const today = now.toISOString().slice(0, 10);
+  const today = localDateKey(now);
   if (!profile.lastStreakDate) {
     profile.lastStreakDate = today;
     profile.streakDays = 1;
@@ -224,7 +254,7 @@ function updateQuestStreak(profile, now = new Date()) {
   if (!profile.questMode) {
     return { updated: false, current: profile.streaks.questCurrent };
   }
-  const today = now.toISOString().slice(0, 10);
+  const today = localDateKey(now);
   if (!profile.lastQuestDay) {
     profile.lastQuestDay = today;
     profile.streaks.questCurrent = 1;
@@ -256,6 +286,10 @@ function updateTestStreak(profile, action) {
     return { updated: false, current: profile.streaks.testCurrent };
   }
   if (action !== 'test') {
+    // A successful non-test action breaks the run of consecutive tests.
+    if (profile.streaks.testCurrent !== 0) {
+      profile.streaks.testCurrent = 0;
+    }
     return { updated: false, current: profile.streaks.testCurrent };
   }
   profile.streaks.testCurrent += 1;
@@ -296,6 +330,31 @@ function getSessionSummary(profile) {
   };
 }
 
+// Recompute level, refresh class from repo history, and evaluate achievements
+// against the final totalXp. Shared by awardXP and awardDurationBonus so the two
+// award paths stay in lockstep. Mutates profile; returns the new unlocks.
+async function finalizeAward(profile, { now, action, durationBonus, context }) {
+  const levelInfo = getLevelFromTotalXp(profile.totalXp);
+  profile.level = levelInfo.level;
+  profile.xp = levelInfo.xp;
+
+  try {
+    profile.class = await detectClass(profile, context.repoPath || process.cwd());
+  } catch {
+    profile.class = profile.class || 'Adventurer';
+  }
+
+  const newlyUnlocked = evaluateAchievements(profile, {
+    ...context,
+    now,
+    action,
+    durationBonus,
+    questStreakCurrent: profile.streaks.questCurrent
+  });
+  profile.achievements = [...profile.achievements, ...newlyUnlocked];
+  return newlyUnlocked;
+}
+
 async function awardXP(action, context = {}) {
   const xpValue = XP_VALUES[action];
   if (!xpValue) {
@@ -330,28 +389,9 @@ async function awardXP(action, context = {}) {
     profile.sessionXp += durationBonus;
   }
 
-  const levelInfo = getLevelFromTotalXp(profile.totalXp);
-  profile.level = levelInfo.level;
-  profile.xp = levelInfo.xp;
-
-  try {
-    profile.class = await detectClass(profile, context.repoPath || process.cwd());
-  } catch (error) {
-    profile.class = profile.class || 'Adventurer';
-  }
-
-  const achievementProfile = {
-    ...profile,
-    totalXp: profile.totalXp - durationBonus
-  };
-  const newlyUnlocked = evaluateAchievements(achievementProfile, {
-    ...context,
-    now,
-    action,
-    durationBonus,
-    questStreakCurrent: profile.streaks.questCurrent
-  });
-  profile.achievements = [...profile.achievements, ...newlyUnlocked];
+  // Achievements see the real totalXp (including any endurance bonus just
+  // awarded) so XP-threshold unlocks match the saved/displayed total.
+  const newlyUnlocked = await finalizeAward(profile, { now, action, durationBonus, context });
 
   await saveProfile(profile);
 
@@ -388,15 +428,14 @@ async function awardDurationBonus(durationMs, context = {}) {
   profile.updatedAt = now.toISOString();
   profile.lastActivity = profile.updatedAt;
 
-  const levelInfo = getLevelFromTotalXp(profile.totalXp);
-  profile.level = levelInfo.level;
-  profile.xp = levelInfo.xp;
+  updateStreak(profile, now);
+  const questStreak = updateQuestStreak(profile, now);
+  // A standalone (non-test) command breaks the consecutive-test streak.
+  const testStreak = updateTestStreak(profile, null);
 
-  try {
-    profile.class = await detectClass(profile, context.repoPath || process.cwd());
-  } catch (error) {
-    profile.class = profile.class || 'Adventurer';
-  }
+  // Mirror awardXP: a standalone endurance bonus must be able to unlock
+  // achievements (notably Marathon Runner and XP thresholds it pushes past).
+  const newlyUnlocked = await finalizeAward(profile, { now, action: null, durationBonus, context });
 
   await saveProfile(profile);
 
@@ -405,7 +444,10 @@ async function awardDurationBonus(durationMs, context = {}) {
     durationBonus,
     level: profile.level,
     previousLevel,
-    sessionStarted
+    sessionStarted,
+    achievements: newlyUnlocked,
+    questStreak,
+    testStreak
   };
 }
 
@@ -415,6 +457,11 @@ export {
   awardXP,
   awardDurationBonus,
   getXpForLevel,
+  getLevelFromTotalXp,
+  getDurationBonus,
+  updateStreak,
+  updateQuestStreak,
+  updateTestStreak,
   startSessionIfNeeded,
   endSession,
   getSessionSummary,
