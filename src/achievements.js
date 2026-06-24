@@ -78,4 +78,4 @@ function evaluateAchievements(profile, context) {
   return newUnlocks;
 }
 
-export { evaluateAchievements, ACHIEVEMENTS };
+export { evaluateAchievements };

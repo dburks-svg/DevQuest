@@ -1,1 +1,14 @@
 node_modules/
+
+# Test / coverage output
+coverage/
+
+# npm pack artifacts
+*.tgz
+
+# Logs and OS/editor cruft
+*.log
+npm-debug.log*
+.DS_Store
+.idea/
+.vscode/

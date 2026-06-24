@@ -6,8 +6,16 @@
   "bin": {
     "devquest": "./bin/devquest.js"
   },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
   "scripts": {
-    "start": "node bin/devquest.js"
+    "start": "node bin/devquest.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint ."
   },
   "keywords": [
     "cli",
@@ -20,9 +28,15 @@
   "author": "",
   "license": "ISC",
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "chalk": "^5.3.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "vitest": "^2.0.0"
   }
 }

@@ -14,20 +14,38 @@ Or, for local development:
 npm link
 ```
 
+## Commands
+
+DevQuest works by wrapping the commands you already run. Anything that is not a
+built-in subcommand is executed unchanged, and XP is awarded on success.
+
+Built-in subcommands:
+
+```bash
+devquest status          # Show your class, level, and XP bar
+devquest summary         # End the current session and show its summary
+devquest reset-session   # Clear the current session counters
+devquest help            # Show usage
+```
+
+Wrap any command to earn XP when it succeeds:
+
+```bash
+devquest git commit -m "fix login bug"
+devquest npm test
+```
+
 ## Quest Mode (opt-in)
 
-Quest Mode is an optional, opt-in session mode that enables XP rewards, endurance bonuses, and streak tracking.
+Base XP, levels, classes, and most achievements are always tracked. Quest Mode is
+an optional, opt-in session mode that adds endurance (duration) bonuses and streak
+tracking on top.
 
-Turn it on and off:
+Turn it on and off, and check status:
 
 ```bash
 devquest quest on
 devquest quest off
-```
-
-Check status:
-
-```bash
 devquest quest status
 ```
 
@@ -35,10 +53,22 @@ devquest quest status
 
 - XP is awarded only when wrapped commands succeed (exit code 0).
 - No XP is awarded on failures.
+- Action XP: commit +50, push +75, test +100, merge +150, deploy +500.
 - In Quest Mode, long-running successful commands earn a duration bonus:
   - 2+ minutes: +25 XP
   - 5+ minutes: +50 XP
   - 15+ minutes: +100 XP
+
+## Levels, Classes, and Achievements
+
+- **Levels**: Total XP maps to a level on a rising curve (each level costs more
+  than the last).
+- **Classes**: Your class is inferred from how you work. The dominant signal across
+  your commits and tracked actions (bug fixes, refactors, frontend, backend,
+  database, tests, deploys) picks a class such as Debug Dragon, Frontend Mage, or
+  Test Cleric; a balanced spread makes you a Full Stack Druid.
+- **Achievements**: One-off unlocks for milestones (first XP, XP thresholds, time
+  of day, streaks, long sessions, bug-fix commits, and more).
 
 ## Streaks
 
