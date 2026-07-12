@@ -156,6 +156,17 @@ describe('devquest CLI (end to end)', () => {
     expect(stdout).toContain('Earn your first XP');
   }, 30000);
 
+  it('prints the package version for version, --version, and -v', async () => {
+    const { version } = JSON.parse(
+      await fs.readFile(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')
+    );
+    for (const flag of ['version', '--version', '-v']) {
+      const { code, stdout } = await runCli([flag], { cwd: workdir, home });
+      expect(code).toBe(0);
+      expect(stdout.trim()).toBe(version);
+    }
+  }, 30000);
+
   it('shows lifetime stats including the longest quest streak', async () => {
     const { code, stdout } = await runCli(['stats'], { cwd: workdir, home });
     expect(code).toBe(0);

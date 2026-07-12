@@ -120,6 +120,7 @@ function helpText() {
     chalk.white('devquest summary') + chalk.gray(' End session and show summary'),
     chalk.white('devquest reset-session') + chalk.gray(' Clear session counters'),
     chalk.white('devquest help') + chalk.gray('  Show usage'),
+    chalk.white('devquest version') + chalk.gray(' Show version (also --version, -v)'),
     '',
     chalk.white('devquest quest on') + chalk.gray('  Enable Quest Mode, start session'),
     chalk.white('devquest quest off') + chalk.gray(' Disable Quest Mode, show summary'),
