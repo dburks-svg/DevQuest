@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { spawn } from 'child_process';
+import spawn from 'cross-spawn';
+import { detectAction, extractCommitMessage } from '../src/actions.js';
 import {
   awardXP,
   awardDurationBonus,
@@ -29,41 +30,10 @@ import {
 
 const BUILT_IN_COMMANDS = new Set(['status', 'summary', 'help', 'reset-session', 'quest']);
 
-const ACTION_PATTERNS = [
-  { action: 'commit', pattern: ['git', 'commit'] },
-  { action: 'push', pattern: ['git', 'push'] },
-  { action: 'test', pattern: ['npm', 'test'] },
-  { action: 'deploy', pattern: ['npm', 'run', 'deploy'] },
-  { action: 'merge', pattern: ['git', 'merge'] }
-];
-
-function matchesPrefix(args, pattern) {
-  if (args.length < pattern.length) {
-    return false;
-  }
-  return pattern.every((token, index) => args[index] === token);
-}
-
-function detectAction(args) {
-  const match = ACTION_PATTERNS.find(({ pattern }) => matchesPrefix(args, pattern));
-  return match ? match.action : null;
-}
-
-function extractCommitMessage(args) {
-  for (let i = 0; i < args.length; i += 1) {
-    const arg = args[i];
-    if (arg === '-m' || arg === '--message') {
-      return args[i + 1] || '';
-    }
-    if (arg.startsWith('-m') && arg.length > 2) {
-      return arg.slice(2); // -m"msg" arrives as -mmsg after the shell strips quotes
-    }
-    if (arg.startsWith('--message=')) {
-      return arg.slice('--message='.length);
-    }
-  }
-  // Editor-based commits (no -m/-F) have no message on the command line.
-  return '';
+// Gamification output goes to stderr so the wrapped command's stdout stays
+// pristine for pipes and redirection.
+function say(message) {
+  console.error(message);
 }
 
 async function maybeHandleExpiredSession() {
@@ -74,7 +44,7 @@ async function maybeHandleExpiredSession() {
   }
   const summary = getSessionSummary(profile);
   if (summary) {
-    console.log(renderSessionSummary(summary));
+    say(renderSessionSummary(summary));
     endSession(profile);
     profile.sessionStart = new Date().toISOString();
     profile.sessionXp = 0;
@@ -117,16 +87,23 @@ async function runBuiltIn(command, args) {
 async function runWrappedCommand(args) {
   const action = detectAction(args);
   const startTime = Date.now();
-  const child = spawn(args[0], args.slice(1), {
-    stdio: 'inherit',
-    shell: process.platform === 'win32'
-  });
+  // cross-spawn resolves .cmd/.bat shims and quotes arguments correctly on
+  // Windows, so no shell is involved and args pass through unmodified.
+  const child = spawn(args[0], args.slice(1), { stdio: 'inherit' });
 
   const { code, signal } = await new Promise((resolve) => {
     child.on('close', (closeCode, closeSignal) =>
       resolve({ code: closeCode ?? 0, signal: closeSignal })
     );
-    child.on('error', () => resolve({ code: 1, signal: null }));
+    child.on('error', (error) => {
+      if (error.code === 'ENOENT') {
+        console.error(`devquest: command not found: ${args[0]}`);
+        resolve({ code: 127, signal: null });
+      } else {
+        console.error(`devquest: failed to run ${args[0]} (${error.message})`);
+        resolve({ code: 1, signal: null });
+      }
+    });
   });
 
   if (signal) {
@@ -150,19 +127,19 @@ async function runWrappedCommand(args) {
       });
 
       if (result.sessionStarted) {
-        console.log(sessionStartBanner());
+        say(sessionStartBanner());
       }
 
       if (result.awarded) {
-        console.log(xpGainMessage(action, result.xp));
+        say(xpGainMessage(action, result.xp));
       }
 
       if (result.level > result.previousLevel) {
-        console.log(levelUpMessage(result.level));
+        say(levelUpMessage(result.level));
       }
 
       result.achievements.forEach((achievement) => {
-        console.log(achievementPopup(achievement));
+        say(achievementPopup(achievement));
       });
       const bonusMessages = [];
       if (result.durationBonus > 0) {
@@ -175,7 +152,7 @@ async function runWrappedCommand(args) {
         bonusMessages.push(`📅 Quest streak: ${result.questStreak.current} days`);
       }
       if (bonusMessages.length > 0) {
-        console.log(bonusMessages.join(' · '));
+        say(bonusMessages.join(' · '));
       }
     } else if (code === 0) {
       const durationMs = Date.now() - startTime;
@@ -184,18 +161,18 @@ async function runWrappedCommand(args) {
         repoPath: process.cwd()
       });
       if (result.sessionStarted) {
-        console.log(sessionStartBanner());
+        say(sessionStartBanner());
       }
       if (result.awarded) {
-        console.log(`⏳ Endurance bonus: +${result.durationBonus} XP`);
+        say(`⏳ Endurance bonus: +${result.durationBonus} XP`);
         if (result.level > result.previousLevel) {
-          console.log(levelUpMessage(result.level));
+          say(levelUpMessage(result.level));
         }
         (result.achievements || []).forEach((achievement) => {
-          console.log(achievementPopup(achievement));
+          say(achievementPopup(achievement));
         });
         if (result.questStreak?.updated) {
-          console.log(`📅 Quest streak: ${result.questStreak.current} days`);
+          say(`📅 Quest streak: ${result.questStreak.current} days`);
         }
       }
     } else if (code !== 0) {
@@ -206,7 +183,7 @@ async function runWrappedCommand(args) {
           await saveProfile(profile);
         }
       }
-      console.log(failureMessage(action));
+      say(failureMessage(action));
     }
   } catch (error) {
     // XP bookkeeping must never change the outcome of the user's command.

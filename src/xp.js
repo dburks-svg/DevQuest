@@ -21,7 +21,14 @@ function profilePaths() {
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const LOCK_STALE_MS = 10 * 1000;
 
+// Bump when the meaning of an existing field changes or a field is removed,
+// and add a migration step in normalizeProfile. Adding optional fields with
+// defaults does NOT need a bump; normalizeProfile fills those in already.
+// Profiles written before versioning have no schemaVersion (treated as 0).
+const SCHEMA_VERSION = 1;
+
 const DEFAULT_PROFILE = () => ({
+  schemaVersion: SCHEMA_VERSION,
   username: 'adventurer',
   class: 'Adventurer',
   level: 1,
@@ -136,7 +143,15 @@ function getLevelFromTotalXp(totalXp) {
 }
 
 function normalizeProfile(profile) {
+  if ((profile.schemaVersion || 0) > SCHEMA_VERSION) {
+    // A newer devquest wrote this profile. Unknown fields survive the spread
+    // below, so proceed best-effort but say so instead of failing silently.
+    console.error(
+      `devquest: profile.json uses schema ${profile.schemaVersion}, newer than this version understands (${SCHEMA_VERSION}); proceeding best-effort`
+    );
+  }
   const normalized = { ...DEFAULT_PROFILE(), ...profile };
+  normalized.schemaVersion = Math.max(SCHEMA_VERSION, profile.schemaVersion || 0);
   normalized.stats = { ...DEFAULT_PROFILE().stats, ...(profile.stats || {}) };
   normalized.sessionActions = {
     ...DEFAULT_PROFILE().sessionActions,
@@ -452,6 +467,7 @@ async function awardDurationBonus(durationMs, context = {}) {
 }
 
 export {
+  SCHEMA_VERSION,
   getProfile,
   saveProfile,
   awardXP,
