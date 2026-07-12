@@ -115,4 +115,52 @@ describe('devquest CLI (end to end)', () => {
     expect(code).toBe(0);
     expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
   }, 30000);
+
+  it('awards XP for a custom action defined in config.json', async () => {
+    await fs.writeFile(
+      path.join(home, 'config.json'),
+      JSON.stringify({ actions: { ping: { xp: 42, patterns: [['node', '-e']] } } }),
+      'utf8'
+    );
+    const { code, stderr } = await runCli(['node', '-e', '0'], { cwd: workdir, home });
+    expect(code).toBe(0);
+    expect(stderr).toContain('+42 XP');
+    const profile = JSON.parse(await fs.readFile(path.join(home, 'profile.json'), 'utf8'));
+    expect(profile.totalXp).toBe(42);
+    expect(profile.stats.ping).toBe(1);
+  }, 30000);
+
+  it('suppresses gamification output in quiet mode but still tracks XP', async () => {
+    await fs.writeFile(
+      path.join(home, 'config.json'),
+      JSON.stringify({ actions: { ping: { xp: 42, patterns: [['node', '-e']] } } }),
+      'utf8'
+    );
+    const { code, stdout, stderr } = await runCli(['node', '-e', 'console.log(1)'], {
+      cwd: workdir,
+      home,
+      env: { DEVQUEST_QUIET: '1' }
+    });
+    expect(code).toBe(0);
+    expect(stdout.trim()).toBe('1');
+    expect(stderr).toBe('');
+    const profile = JSON.parse(await fs.readFile(path.join(home, 'profile.json'), 'utf8'));
+    expect(profile.totalXp).toBe(42);
+  }, 30000);
+
+  it('lists achievements with unlock state', async () => {
+    const { code, stdout } = await runCli(['achievements'], { cwd: workdir, home });
+    expect(code).toBe(0);
+    expect(stdout).toContain('Achievements (0/');
+    expect(stdout).toContain('First Blood');
+    expect(stdout).toContain('Earn your first XP');
+  }, 30000);
+
+  it('shows lifetime stats including the longest quest streak', async () => {
+    const { code, stdout } = await runCli(['stats'], { cwd: workdir, home });
+    expect(code).toBe(0);
+    expect(stdout).toContain('DevQuest Stats');
+    expect(stdout).toContain('longest 0');
+    expect(stdout).toContain('Daily streak');
+  }, 30000);
 });

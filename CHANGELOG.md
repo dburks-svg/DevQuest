@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 (2026-07-12)
+
+Feature release (Tier 2 of the v1.0 roadmap).
+
+### Added
+
+- **Configuration file.** `~/.devquest/config.json` (or `$DEVQUEST_HOME/config.json`) can define custom actions with their own XP and command patterns, partially override built-in actions, and set quiet mode. Invalid entries are skipped with a warning; a broken config never affects the wrapped command.
+- **Broader action detection.** Tests are now recognized for pnpm, yarn, bun, npx vitest/jest, pytest, cargo, and go in addition to npm; `gh pr merge` counts as a merge; pnpm and yarn deploy scripts count as deploys. The most specific matching pattern wins. Custom actions count under their own name in stats.
+- **`devquest achievements`** lists every achievement with its description, unlock state, and unlock date.
+- **`devquest stats`** shows lifetime totals, custom action counts, daily streak, quest streak (including the longest, which was tracked but never displayed), and test streak.
+- **10 new achievements**, filling the gap between 100 XP and 10,000 XP: XP milestones (Adventurer of Renown at 1,000 and Hero of the Realm at 5,000), level milestones (Seasoned 5, Veteran 10, Legend 20), lifetime stat milestones (Chronicler 50 commits, Lorekeeper 100 commits, Trial by Fire 100 tests, Siege Master 10 deploys), and Unbroken (30-day streak). All achievements now carry descriptions.
+- **`dq`** is installed as a second, shorter alias for `devquest`.
+- **Quiet mode.** `"quiet": true` in config or `DEVQUEST_QUIET=1` (env wins) suppresses all gamification output while still tracking XP, achievements, and streaks.
+
 ## 0.3.0 (2026-07-12)
 
 Correctness and stability release (Tier 1 of the v1.0 roadmap).

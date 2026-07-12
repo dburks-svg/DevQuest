@@ -67,10 +67,56 @@ function statusCard(profile, xpToNext) {
   ].join('\n');
 }
 
+function achievementsList(profile, definitions) {
+  const unlockedById = new Map(
+    (profile.achievements || []).map((a) => [a.id, a.unlockedAt])
+  );
+  const lines = [
+    chalk.cyan.bold(
+      `🏆 Achievements (${unlockedById.size}/${definitions.length} unlocked)`
+    )
+  ];
+  const pad = Math.max(...definitions.map((d) => d.id.length)) + 2;
+  definitions.forEach((definition) => {
+    const unlockedAt = unlockedById.get(definition.id);
+    const mark = unlockedAt ? chalk.green('✓') : chalk.gray('✗');
+    const name = unlockedAt
+      ? chalk.white(definition.id.padEnd(pad))
+      : chalk.gray(definition.id.padEnd(pad));
+    const when = unlockedAt ? chalk.gray(` (${unlockedAt.slice(0, 10)})`) : '';
+    lines.push(`${mark} ${name}${chalk.gray(definition.description)}${when}`);
+  });
+  return lines.join('\n');
+}
+
+function statsCard(profile) {
+  const { stats, streaks } = profile;
+  const builtIn = new Set(['commits', 'tests', 'deploys', 'pushes', 'merges']);
+  const customLines = Object.entries(stats)
+    .filter(([key, count]) => !builtIn.has(key) && count > 0)
+    .map(([key, count]) => chalk.white(`  ${key}: ${count}`));
+  return [
+    chalk.cyan.bold('📊 DevQuest Stats'),
+    chalk.white(`Class: ${profile.class} · Level: ${profile.level} · Total XP: ${profile.totalXp}`),
+    chalk.white(
+      `Commits: ${stats.commits} · Tests: ${stats.tests} · Pushes: ${stats.pushes} · Merges: ${stats.merges} · Deploys: ${stats.deploys}`
+    ),
+    ...(customLines.length > 0 ? [chalk.gray('Custom actions:'), ...customLines] : []),
+    chalk.white(`Daily streak: ${profile.streakDays} day(s)`),
+    chalk.white(
+      `Quest streak: ${streaks.questCurrent} day(s) (longest ${streaks.questLongest})`
+    ),
+    chalk.white(`Test streak: ${streaks.testCurrent}`),
+    chalk.white(`Achievements: ${(profile.achievements || []).length}`)
+  ].join('\n');
+}
+
 function helpText() {
   return [
     chalk.cyan.bold('DevQuest Commands'),
     chalk.white('devquest status') + chalk.gray('  Show character, level, XP bar'),
+    chalk.white('devquest stats') + chalk.gray('  Show lifetime stats and streaks'),
+    chalk.white('devquest achievements') + chalk.gray(' List achievements and unlock state'),
     chalk.white('devquest summary') + chalk.gray(' End session and show summary'),
     chalk.white('devquest reset-session') + chalk.gray(' Clear session counters'),
     chalk.white('devquest help') + chalk.gray('  Show usage'),
@@ -79,7 +125,9 @@ function helpText() {
     chalk.white('devquest quest off') + chalk.gray(' Disable Quest Mode, show summary'),
     chalk.white('devquest quest status') + chalk.gray(' Show quest mode status'),
     '',
-    chalk.gray('Wrap any command to earn XP on success, e.g. devquest git commit -m "fix"')
+    chalk.gray('Wrap any command to earn XP on success, e.g. devquest git commit -m "fix"'),
+    chalk.gray('dq is a shorter alias: dq npm test'),
+    chalk.gray('Custom actions and XP: ~/.devquest/config.json · Quiet mode: DEVQUEST_QUIET=1')
   ].join('\n');
 }
 
@@ -91,7 +139,9 @@ export {
   levelUpMessage,
   failureMessage,
   achievementPopup,
+  achievementsList,
   sessionSummary,
   statusCard,
+  statsCard,
   helpText
 };

@@ -1,13 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import { detectAction, extractCommitMessage } from '../src/actions.js';
+import { DEFAULT_ACTIONS, buildMatchers, detectAction, extractCommitMessage } from '../src/actions.js';
 
 describe('detectAction', () => {
-  it('matches known action prefixes', () => {
-    expect(detectAction(['git', 'commit', '-m', 'msg'])).toBe('commit');
-    expect(detectAction(['git', 'push', 'origin', 'main'])).toBe('push');
-    expect(detectAction(['git', 'merge', 'feature'])).toBe('merge');
-    expect(detectAction(['npm', 'test'])).toBe('test');
-    expect(detectAction(['npm', 'run', 'deploy'])).toBe('deploy');
+  it('matches known action prefixes with their XP', () => {
+    expect(detectAction(['git', 'commit', '-m', 'msg'])).toEqual({ action: 'commit', xp: 50 });
+    expect(detectAction(['git', 'push', 'origin', 'main'])).toEqual({ action: 'push', xp: 75 });
+    expect(detectAction(['git', 'merge', 'feature'])).toEqual({ action: 'merge', xp: 150 });
+    expect(detectAction(['npm', 'test'])).toEqual({ action: 'test', xp: 100 });
+    expect(detectAction(['npm', 'run', 'deploy'])).toEqual({ action: 'deploy', xp: 500 });
+  });
+
+  it('detects test runners beyond npm', () => {
+    expect(detectAction(['pnpm', 'test'])?.action).toBe('test');
+    expect(detectAction(['yarn', 'test'])?.action).toBe('test');
+    expect(detectAction(['bun', 'test'])?.action).toBe('test');
+    expect(detectAction(['npx', 'vitest', 'run'])?.action).toBe('test');
+    expect(detectAction(['pytest', '-x'])?.action).toBe('test');
+    expect(detectAction(['cargo', 'test'])?.action).toBe('test');
+    expect(detectAction(['go', 'test', './...'])?.action).toBe('test');
+  });
+
+  it('detects gh pr merge as a merge', () => {
+    expect(detectAction(['gh', 'pr', 'merge', '9'])?.action).toBe('merge');
   });
 
   it('requires the full prefix in order', () => {
@@ -25,6 +39,24 @@ describe('detectAction', () => {
   it('does not match flags that merely resemble a prefix token', () => {
     // `git -c user.name=x commit` is not detected; the prefix must be exact.
     expect(detectAction(['git', '-c', 'user.name=x', 'commit'])).toBeNull();
+  });
+
+  it('prefers the most specific pattern when prefixes overlap', () => {
+    const matchers = buildMatchers({
+      short: { xp: 10, patterns: [['make']] },
+      long: { xp: 20, patterns: [['make', 'deploy']] }
+    });
+    expect(detectAction(['make', 'deploy'], matchers)).toEqual({ action: 'long', xp: 20 });
+    expect(detectAction(['make', 'build'], matchers)).toEqual({ action: 'short', xp: 10 });
+  });
+
+  it('supports custom actions from a merged config', () => {
+    const matchers = buildMatchers({
+      ...DEFAULT_ACTIONS,
+      docs: { xp: 30, patterns: [['npm', 'run', 'docs']] }
+    });
+    expect(detectAction(['npm', 'run', 'docs'], matchers)).toEqual({ action: 'docs', xp: 30 });
+    expect(detectAction(['git', 'commit'], matchers)).toEqual({ action: 'commit', xp: 50 });
   });
 });
 

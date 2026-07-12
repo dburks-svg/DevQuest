@@ -371,8 +371,10 @@ async function finalizeAward(profile, { now, action, durationBonus, context }) {
 }
 
 async function awardXP(action, context = {}) {
-  const xpValue = XP_VALUES[action];
-  if (!xpValue) {
+  // Config-driven actions pass their XP via context; the built-in table is
+  // the fallback so direct callers (and older tests) keep working.
+  const xpValue = context.xpValue ?? XP_VALUES[action];
+  if (typeof xpValue !== 'number' || !Number.isFinite(xpValue) || xpValue <= 0) {
     return { awarded: false, reason: 'no-xp' };
   }
 
@@ -389,11 +391,11 @@ async function awardXP(action, context = {}) {
   profile.updatedAt = now.toISOString();
   profile.lastActivity = profile.updatedAt;
 
-  const statKey = STAT_KEYS[action];
-  if (statKey) {
-    profile.stats[statKey] += 1;
-    profile.sessionActions[statKey] += 1;
-  }
+  // Built-in actions keep their plural stat keys; custom (config-defined)
+  // actions count under their own name.
+  const statKey = STAT_KEYS[action] || action;
+  profile.stats[statKey] = (profile.stats[statKey] || 0) + 1;
+  profile.sessionActions[statKey] = (profile.sessionActions[statKey] || 0) + 1;
 
   updateStreak(profile, now);
   const questStreak = updateQuestStreak(profile, now);

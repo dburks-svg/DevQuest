@@ -8,9 +8,12 @@ import {
   resetTestStreak
 } from './xp.js';
 import { detectClass } from './class.js';
+import { ACHIEVEMENTS } from './achievements.js';
 import {
   sessionSummary as renderSessionSummary,
   statusCard,
+  statsCard,
+  achievementsList,
   helpText,
   questModeOnBanner,
   questModeOffMessage
@@ -27,6 +30,16 @@ async function showStatus() {
   await saveProfile(profile);
   const xpToNext = getXpForLevel(profile.level);
   console.log(statusCard(profile, xpToNext));
+}
+
+async function showAchievements() {
+  const profile = await getProfile();
+  console.log(achievementsList(profile, ACHIEVEMENTS));
+}
+
+async function showStats() {
+  const profile = await getProfile();
+  console.log(statsCard(profile));
 }
 
 async function showSummary() {
@@ -127,4 +140,12 @@ async function handleQuestCommand(args) {
   process.exitCode = 1;
 }
 
-export { showStatus, showSummary, showHelp, resetSession, handleQuestCommand };
+export {
+  showStatus,
+  showStats,
+  showAchievements,
+  showSummary,
+  showHelp,
+  resetSession,
+  handleQuestCommand
+};

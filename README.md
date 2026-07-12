@@ -23,6 +23,8 @@ Built-in subcommands:
 
 ```bash
 devquest status          # Show your class, level, and XP bar
+devquest stats           # Show lifetime stats and streaks
+devquest achievements    # List all achievements and unlock state
 devquest summary         # End the current session and show its summary
 devquest reset-session   # Clear the current session counters
 devquest help            # Show usage
@@ -33,6 +35,12 @@ Wrap any command to earn XP when it succeeds:
 ```bash
 devquest git commit -m "fix login bug"
 devquest npm test
+```
+
+`dq` is installed as a shorter alias for `devquest`:
+
+```bash
+dq npm test
 ```
 
 ## Quest Mode (opt-in)
@@ -54,10 +62,39 @@ devquest quest status
 - XP is awarded only when wrapped commands succeed (exit code 0).
 - No XP is awarded on failures.
 - Action XP: commit +50, push +75, test +100, merge +150, deploy +500.
+- Out of the box, DevQuest recognizes: `git commit`, `git push`, `git merge`,
+  `gh pr merge`, `npm test`, `npm run test`, `pnpm test`, `yarn test`,
+  `bun test`, `npx vitest`, `npx jest`, `pytest`, `cargo test`, `go test`,
+  and `npm run deploy` / `pnpm run deploy` / `yarn deploy`.
 - In Quest Mode, long-running successful commands earn a duration bonus:
   - 2+ minutes: +25 XP
   - 5+ minutes: +50 XP
   - 15+ minutes: +100 XP
+
+## Configuration
+
+Create `~/.devquest/config.json` (or `$DEVQUEST_HOME/config.json`) to add your
+own actions, change XP values, or turn on quiet mode:
+
+```json
+{
+  "actions": {
+    "commit": { "xp": 25 },
+    "docs": { "xp": 30, "patterns": [["npm", "run", "docs"]] }
+  },
+  "quiet": false
+}
+```
+
+- Each action has an `xp` value and a list of `patterns`; a pattern is the
+  leading tokens of a command. The most specific matching pattern wins.
+- Overriding a built-in action is partial: setting only `xp` keeps its default
+  patterns, and vice versa.
+- Invalid entries are skipped with a warning; a broken config never breaks the
+  wrapped command.
+- Quiet mode (`"quiet": true` or the `DEVQUEST_QUIET=1` environment variable,
+  which wins over the file) suppresses all XP messages and popups while still
+  tracking progress. `DEVQUEST_QUIET=0` forces output back on.
 
 ## Levels, Classes, and Achievements
 
