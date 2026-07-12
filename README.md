@@ -86,9 +86,12 @@ devquest quest off
 
 ## Safety Guarantees
 
-- Commands run unmodified.
-- Exit codes are preserved.
+- Commands run unmodified, with arguments passed through exactly as written (including quoting on Windows).
+- Exit codes are preserved. If the command itself cannot be found, devquest exits 127 (the shell convention) with a clear message.
+- The wrapped command's stdout is untouched: all XP messages, banners, and popups go to stderr, so pipes and redirection behave exactly as they would without devquest.
 - Interactive commands work normally.
+
+DevQuest requires Node.js 20 or newer.
 
 ## Local-first
 

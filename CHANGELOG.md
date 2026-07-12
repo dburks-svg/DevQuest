@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.0 (2026-07-12)
+
+Correctness and stability release (Tier 1 of the v1.0 roadmap).
+
+### Fixed
+
+- **High. Windows argument mangling.** The wrapper spawned with `shell: true` on Windows, which concatenates arguments without quoting. Any argument containing spaces was split apart: `devquest git commit -m "fix login bug"` committed with the message `fix` and then errored on `login` and `bug`, breaking the "commands run unmodified" guarantee. Commands are now spawned through cross-spawn, which resolves `.cmd`/`.bat` shims and quotes arguments correctly with no shell involved.
+- **Gamification output moved to stderr.** XP messages, banners, achievement popups, and failure notices printed to stdout, polluting pipes (`devquest some-cmd | consumer` received "+50 XP" in the stream). All flavor output now goes to stderr; the wrapped command's stdout is untouched. Output of the built-in subcommands (`status`, `summary`, `help`, `quest status`) remains on stdout, since there it is the primary output.
+- **Command not found is now reported.** A nonexistent wrapped command previously exited 1 with no explanation (POSIX) or a raw shell error (Windows). It now prints `devquest: command not found: <cmd>` to stderr and exits 127, the shell convention.
+
+### Added
+
+- **Profile schema versioning.** `profile.json` now carries `schemaVersion` (currently 1). Profiles written before versioning are migrated transparently on load. Profiles written by a newer devquest load best-effort with a warning, and their version marker and unknown fields are preserved.
+- **CLI test coverage.** Action detection and commit message extraction moved to `src/actions.js` and gained unit tests, and a new end-to-end suite runs the real binary: argument passthrough (the Windows quoting regression), exit code preservation, stdout purity, exit 127 on unknown commands, a full `git commit` XP flow, and `.cmd` shim resolution.
+- **CI matrix expanded** from ubuntu-only (Node 18/20) to ubuntu, windows, and macos on Node 20/22/24. The Windows quoting bug survived to 0.2.0 precisely because CI never ran on Windows.
+
+### Changed
+
+- **Node 20+ required** (`engines` bumped from >=18). Node 18 is end of life.
+- Dev tooling: vitest upgraded from 2.x to 4.x, clearing all `npm audit` advisories.
+
 ## 0.2.0 (2026-07-06)
 
 First release since the full audit (see AUDIT.md for every finding, each backed by a regression test). If you are on 0.1.0, upgrade: it contains a data-loss bug.
