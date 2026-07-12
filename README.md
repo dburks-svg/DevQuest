@@ -1,5 +1,9 @@
 # DevQuest
 
+[![CI](https://github.com/dburks-svg/DevQuest/actions/workflows/ci.yml/badge.svg)](https://github.com/dburks-svg/DevQuest/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/devquest)](https://www.npmjs.com/package/devquest)
+[![node](https://img.shields.io/node/v/devquest)](https://www.npmjs.com/package/devquest)
+
 DevQuest is a gamified terminal wrapper for real development work. It adds light RPG flavor and rewards for successful commands, with an ADHD-friendly focus on momentum: minimal friction, no extra prompts, and no noisy output unless you opt in. It runs commands exactly as you would run them, and only adds XP and progress tracking when it is safe to do so.
 
 ## Installation
@@ -28,6 +32,7 @@ devquest achievements    # List all achievements and unlock state
 devquest summary         # End the current session and show its summary
 devquest reset-session   # Clear the current session counters
 devquest help            # Show usage
+devquest version         # Show version (also --version, -v)
 ```
 
 Wrap any command to earn XP when it succeeds:

@@ -1,6 +1,6 @@
 {
   "name": "devquest",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "A gamified terminal wrapper that rewards real development work with XP, levels, and achievements",
   "type": "module",
   "bin": {
@@ -27,8 +27,16 @@
     "achievements",
     "dnd"
   ],
-  "author": "",
+  "author": "Dana Burks <dburks@nuralyn.com>",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dburks-svg/DevQuest.git"
+  },
+  "homepage": "https://github.com/dburks-svg/DevQuest#readme",
+  "bugs": {
+    "url": "https://github.com/dburks-svg/DevQuest/issues"
+  },
   "engines": {
     "node": ">=20.0.0"
   },

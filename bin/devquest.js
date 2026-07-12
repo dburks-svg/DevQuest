@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createRequire } from 'module';
 import spawn from 'cross-spawn';
 import { buildMatchers, detectAction, extractCommitMessage } from '../src/actions.js';
 import { loadConfig, isQuiet } from '../src/config.js';
@@ -222,6 +223,12 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.length === 0) {
     await showHelp();
+    return;
+  }
+
+  if (args[0] === 'version' || args[0] === '--version' || args[0] === '-v') {
+    const { version } = createRequire(import.meta.url)('../package.json');
+    console.log(version);
     return;
   }
 

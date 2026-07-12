@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0 (2026-07-12)
+
+Release polish (Tier 3 of the v1.0 roadmap).
+
+### Added
+
+- **Automated npm publishing.** A Release workflow publishes to npm on every `v*` tag via npm trusted publishing (OIDC) with provenance, after running lint and tests and verifying the tag matches package.json. One-time npmjs.com setup steps are in RELEASING.md.
+- **`devquest version`** (also `--version` and `-v`) prints the installed version.
+- **npm page metadata**: repository, homepage, bugs, and author fields, so the npm page links back to GitHub.
+- **README badges** for CI status, npm version, and supported Node range.
+
+### Changed
+
+- GitHub Actions bumped to checkout@v5 and setup-node@v5 (v4 targeted the deprecated Node 20 runner runtime).
+
 ## 0.4.0 (2026-07-12)
 
 Feature release (Tier 2 of the v1.0 roadmap).
