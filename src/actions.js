@@ -1,10 +1,48 @@
-const ACTION_PATTERNS = [
-  { action: 'commit', pattern: ['git', 'commit'] },
-  { action: 'push', pattern: ['git', 'push'] },
-  { action: 'test', pattern: ['npm', 'test'] },
-  { action: 'deploy', pattern: ['npm', 'run', 'deploy'] },
-  { action: 'merge', pattern: ['git', 'merge'] }
-];
+// Built-in actions. Each action has an XP value and one or more command
+// prefixes that trigger it. Users can override or extend these via
+// config.json (see src/config.js); a config entry with the same name
+// replaces the fields it specifies and keeps the rest.
+const DEFAULT_ACTIONS = {
+  commit: {
+    xp: 50,
+    patterns: [['git', 'commit']]
+  },
+  push: {
+    xp: 75,
+    patterns: [['git', 'push']]
+  },
+  test: {
+    xp: 100,
+    patterns: [
+      ['npm', 'test'],
+      ['npm', 'run', 'test'],
+      ['pnpm', 'test'],
+      ['pnpm', 'run', 'test'],
+      ['yarn', 'test'],
+      ['bun', 'test'],
+      ['npx', 'vitest'],
+      ['npx', 'jest'],
+      ['pytest'],
+      ['cargo', 'test'],
+      ['go', 'test']
+    ]
+  },
+  deploy: {
+    xp: 500,
+    patterns: [
+      ['npm', 'run', 'deploy'],
+      ['pnpm', 'run', 'deploy'],
+      ['yarn', 'deploy']
+    ]
+  },
+  merge: {
+    xp: 150,
+    patterns: [
+      ['git', 'merge'],
+      ['gh', 'pr', 'merge']
+    ]
+  }
+};
 
 function matchesPrefix(args, pattern) {
   if (args.length < pattern.length) {
@@ -13,9 +51,27 @@ function matchesPrefix(args, pattern) {
   return pattern.every((token, index) => args[index] === token);
 }
 
-function detectAction(args) {
-  const match = ACTION_PATTERNS.find(({ pattern }) => matchesPrefix(args, pattern));
-  return match ? match.action : null;
+// Flattens an actions map into matchers sorted longest-prefix-first, so the
+// most specific pattern wins (e.g. ['npm','run','deploy'] is checked before a
+// hypothetical ['npm','run'] pattern).
+function buildMatchers(actions = DEFAULT_ACTIONS) {
+  const matchers = [];
+  for (const [action, def] of Object.entries(actions)) {
+    for (const pattern of def.patterns) {
+      matchers.push({ action, xp: def.xp, pattern });
+    }
+  }
+  matchers.sort((a, b) => b.pattern.length - a.pattern.length);
+  return matchers;
+}
+
+const DEFAULT_MATCHERS = buildMatchers();
+
+// Returns { action, xp } for the first (most specific) matching pattern, or
+// null when the command is not a tracked action.
+function detectAction(args, matchers = DEFAULT_MATCHERS) {
+  const match = matchers.find(({ pattern }) => matchesPrefix(args, pattern));
+  return match ? { action: match.action, xp: match.xp } : null;
 }
 
 function extractCommitMessage(args) {
@@ -35,4 +91,4 @@ function extractCommitMessage(args) {
   return '';
 }
 
-export { ACTION_PATTERNS, detectAction, extractCommitMessage };
+export { DEFAULT_ACTIONS, buildMatchers, detectAction, extractCommitMessage };

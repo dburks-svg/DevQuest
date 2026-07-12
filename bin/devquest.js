@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import spawn from 'cross-spawn';
-import { detectAction, extractCommitMessage } from '../src/actions.js';
+import { buildMatchers, detectAction, extractCommitMessage } from '../src/actions.js';
+import { loadConfig, isQuiet } from '../src/config.js';
 import {
   awardXP,
   awardDurationBonus,
@@ -22,18 +23,34 @@ import {
 } from '../src/theme-dnd.js';
 import {
   showStatus,
+  showStats,
+  showAchievements,
   showSummary,
   showHelp,
   resetSession,
   handleQuestCommand
 } from '../src/commands.js';
 
-const BUILT_IN_COMMANDS = new Set(['status', 'summary', 'help', 'reset-session', 'quest']);
+const BUILT_IN_COMMANDS = new Set([
+  'status',
+  'stats',
+  'achievements',
+  'summary',
+  'help',
+  'reset-session',
+  'quest'
+]);
+
+// Set once at startup from config/DEVQUEST_QUIET. Quiet suppresses flavor
+// output only; XP and achievements are still tracked.
+let quiet = false;
 
 // Gamification output goes to stderr so the wrapped command's stdout stays
 // pristine for pipes and redirection.
 function say(message) {
-  console.error(message);
+  if (!quiet) {
+    console.error(message);
+  }
 }
 
 async function maybeHandleExpiredSession() {
@@ -66,6 +83,12 @@ async function runBuiltIn(command, args) {
     case 'status':
       await showStatus();
       break;
+    case 'stats':
+      await showStats();
+      break;
+    case 'achievements':
+      await showAchievements();
+      break;
     case 'summary':
       await showSummary();
       break;
@@ -84,8 +107,9 @@ async function runBuiltIn(command, args) {
   }
 }
 
-async function runWrappedCommand(args) {
-  const action = detectAction(args);
+async function runWrappedCommand(args, matchers) {
+  const match = detectAction(args, matchers);
+  const action = match?.action ?? null;
   const startTime = Date.now();
   // cross-spawn resolves .cmd/.bat shims and quotes arguments correctly on
   // Windows, so no shell is involved and args pass through unmodified.
@@ -122,6 +146,7 @@ async function runWrappedCommand(args) {
       const result = await awardXP(action, {
         now: new Date(),
         durationMs,
+        xpValue: match.xp,
         repoPath: process.cwd(),
         commitMessage: action === 'commit' ? extractCommitMessage(args) : ''
       });
@@ -200,6 +225,9 @@ async function main() {
     return;
   }
 
+  const config = await loadConfig();
+  quiet = isQuiet(config);
+
   await maybeHandleExpiredSession();
 
   if (BUILT_IN_COMMANDS.has(args[0])) {
@@ -207,7 +235,7 @@ async function main() {
     return;
   }
 
-  await runWrappedCommand(args);
+  await runWrappedCommand(args, buildMatchers(config.actions));
 }
 
 main();
