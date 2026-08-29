@@ -80,10 +80,12 @@ function formatDuration(ms) {
 
 async function questStatus() {
   const profile = await getProfile();
-  const lines = [`Quest Mode: ${profile.questMode ? 'ON' : 'OFF'}`];
-  lines.push(`Class: ${profile.class}`);
-  lines.push(`Level: ${profile.level}`);
-  lines.push(`Total XP: ${profile.totalXp}`);
+  const lines = [
+    `Quest Mode: ${profile.questMode ? 'ON' : 'OFF'}`,
+    `Class: ${profile.class}`,
+    `Level: ${profile.level}`,
+    `Total XP: ${profile.totalXp}`
+  ];
   if (profile.sessionStart) {
     const ageMs = Date.now() - new Date(profile.sessionStart).getTime();
     lines.push(`Session: ${formatDuration(ageMs)} · XP ${profile.sessionXp}`);
