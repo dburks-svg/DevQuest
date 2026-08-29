@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createRequire } from 'module';
+import { createRequire } from 'node:module';
 import spawn from 'cross-spawn';
 import { buildMatchers, detectAction, extractCommitMessage } from '../src/actions.js';
 import { loadConfig, isQuiet } from '../src/config.js';
@@ -108,6 +108,96 @@ async function runBuiltIn(command, args) {
   }
 }
 
+function waitForExit(child, commandName) {
+  return new Promise((resolve) => {
+    child.on('close', (closeCode, closeSignal) =>
+      resolve({ code: closeCode ?? 0, signal: closeSignal })
+    );
+    child.on('error', (error) => {
+      if (error.code === 'ENOENT') {
+        console.error(`devquest: command not found: ${commandName}`);
+        resolve({ code: 127, signal: null });
+      } else {
+        console.error(`devquest: failed to run ${commandName} (${error.message})`);
+        resolve({ code: 1, signal: null });
+      }
+    });
+  });
+}
+
+async function rewardAction(action, match, args, durationMs) {
+  const result = await awardXP(action, {
+    now: new Date(),
+    durationMs,
+    xpValue: match.xp,
+    repoPath: process.cwd(),
+    commitMessage: action === 'commit' ? extractCommitMessage(args) : ''
+  });
+
+  if (result.sessionStarted) {
+    say(sessionStartBanner());
+  }
+
+  if (result.awarded) {
+    say(xpGainMessage(action, result.xp));
+  }
+
+  if (result.level > result.previousLevel) {
+    say(levelUpMessage(result.level));
+  }
+
+  result.achievements.forEach((achievement) => {
+    say(achievementPopup(achievement));
+  });
+  const bonusMessages = [];
+  if (result.durationBonus > 0) {
+    bonusMessages.push(`⏳ Endurance bonus: +${result.durationBonus} XP`);
+  }
+  if (result.testStreak?.updated) {
+    bonusMessages.push(`🔥 Test streak: ${result.testStreak.current}`);
+  }
+  if (result.questStreak?.updated) {
+    bonusMessages.push(`📅 Quest streak: ${result.questStreak.current} days`);
+  }
+  if (bonusMessages.length > 0) {
+    say(bonusMessages.join(' · '));
+  }
+}
+
+async function rewardDuration(durationMs) {
+  const result = await awardDurationBonus(durationMs, {
+    now: new Date(),
+    repoPath: process.cwd()
+  });
+  if (result.sessionStarted) {
+    say(sessionStartBanner());
+  }
+  if (!result.awarded) {
+    return;
+  }
+  say(`⏳ Endurance bonus: +${result.durationBonus} XP`);
+  if (result.level > result.previousLevel) {
+    say(levelUpMessage(result.level));
+  }
+  (result.achievements || []).forEach((achievement) => {
+    say(achievementPopup(achievement));
+  });
+  if (result.questStreak?.updated) {
+    say(`📅 Quest streak: ${result.questStreak.current} days`);
+  }
+}
+
+async function handleFailure(action) {
+  if (action === 'test') {
+    const profile = await getProfile();
+    if (resetTestStreak(profile)) {
+      profile.updatedAt = new Date().toISOString();
+      await saveProfile(profile);
+    }
+  }
+  say(failureMessage(action));
+}
+
 async function runWrappedCommand(args, matchers) {
   const match = detectAction(args, matchers);
   const action = match?.action ?? null;
@@ -116,20 +206,7 @@ async function runWrappedCommand(args, matchers) {
   // Windows, so no shell is involved and args pass through unmodified.
   const child = spawn(args[0], args.slice(1), { stdio: 'inherit' });
 
-  const { code, signal } = await new Promise((resolve) => {
-    child.on('close', (closeCode, closeSignal) =>
-      resolve({ code: closeCode ?? 0, signal: closeSignal })
-    );
-    child.on('error', (error) => {
-      if (error.code === 'ENOENT') {
-        console.error(`devquest: command not found: ${args[0]}`);
-        resolve({ code: 127, signal: null });
-      } else {
-        console.error(`devquest: failed to run ${args[0]} (${error.message})`);
-        resolve({ code: 1, signal: null });
-      }
-    });
-  });
+  const { code, signal } = await waitForExit(child, args[0]);
 
   if (signal) {
     // Re-raising a POSIX signal lets the parent reflect the child's termination
@@ -143,73 +220,11 @@ async function runWrappedCommand(args, matchers) {
 
   try {
     if (code === 0 && action) {
-      const durationMs = Date.now() - startTime;
-      const result = await awardXP(action, {
-        now: new Date(),
-        durationMs,
-        xpValue: match.xp,
-        repoPath: process.cwd(),
-        commitMessage: action === 'commit' ? extractCommitMessage(args) : ''
-      });
-
-      if (result.sessionStarted) {
-        say(sessionStartBanner());
-      }
-
-      if (result.awarded) {
-        say(xpGainMessage(action, result.xp));
-      }
-
-      if (result.level > result.previousLevel) {
-        say(levelUpMessage(result.level));
-      }
-
-      result.achievements.forEach((achievement) => {
-        say(achievementPopup(achievement));
-      });
-      const bonusMessages = [];
-      if (result.durationBonus > 0) {
-        bonusMessages.push(`⏳ Endurance bonus: +${result.durationBonus} XP`);
-      }
-      if (result.testStreak?.updated) {
-        bonusMessages.push(`🔥 Test streak: ${result.testStreak.current}`);
-      }
-      if (result.questStreak?.updated) {
-        bonusMessages.push(`📅 Quest streak: ${result.questStreak.current} days`);
-      }
-      if (bonusMessages.length > 0) {
-        say(bonusMessages.join(' · '));
-      }
+      await rewardAction(action, match, args, Date.now() - startTime);
     } else if (code === 0) {
-      const durationMs = Date.now() - startTime;
-      const result = await awardDurationBonus(durationMs, {
-        now: new Date(),
-        repoPath: process.cwd()
-      });
-      if (result.sessionStarted) {
-        say(sessionStartBanner());
-      }
-      if (result.awarded) {
-        say(`⏳ Endurance bonus: +${result.durationBonus} XP`);
-        if (result.level > result.previousLevel) {
-          say(levelUpMessage(result.level));
-        }
-        (result.achievements || []).forEach((achievement) => {
-          say(achievementPopup(achievement));
-        });
-        if (result.questStreak?.updated) {
-          say(`📅 Quest streak: ${result.questStreak.current} days`);
-        }
-      }
-    } else if (code !== 0) {
-      if (action === 'test') {
-        const profile = await getProfile();
-        if (resetTestStreak(profile)) {
-          profile.updatedAt = new Date().toISOString();
-          await saveProfile(profile);
-        }
-      }
-      say(failureMessage(action));
+      await rewardDuration(Date.now() - startTime);
+    } else {
+      await handleFailure(action);
     }
   } catch (error) {
     // XP bookkeeping must never change the outcome of the user's command.
@@ -245,4 +260,4 @@ async function main() {
   await runWrappedCommand(args, buildMatchers(config.actions));
 }
 
-main();
+await main();

@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process';
+import { execFileSync } from 'node:child_process';
 
 const BUG_KEYWORDS = /(fix|bug|issue|hotfix|patch)/i;
 const REFACTOR_KEYWORDS = /(refactor|cleanup|restructure|simplify)/i;

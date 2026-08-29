@@ -1,6 +1,6 @@
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
 import { evaluateAchievements } from './achievements.js';
 import { detectClass } from './class.js';
 
@@ -89,6 +89,23 @@ async function ensureProfileDir() {
   await fs.mkdir(profilePaths().dir, { recursive: true });
 }
 
+// Returns true if the lock was demonstrably stale and has been removed.
+async function removeIfStale(lock) {
+  try {
+    const stats = await fs.stat(lock);
+    if (Date.now() - stats.mtimeMs > LOCK_STALE_MS) {
+      // Only remove a lock that is demonstrably stale.
+      await fs.unlink(lock);
+      return true;
+    }
+  } catch (statError) {
+    if (statError.code !== 'ENOENT') {
+      throw statError;
+    }
+  }
+  return false;
+}
+
 async function acquireLock() {
   await ensureProfileDir();
   const { lock } = profilePaths();
@@ -101,18 +118,8 @@ async function acquireLock() {
       if (error.code !== 'EEXIST') {
         throw error;
       }
-      try {
-        const stats = await fs.stat(lock);
-        const age = Date.now() - stats.mtimeMs;
-        if (age > LOCK_STALE_MS) {
-          // Only remove a lock that is demonstrably stale.
-          await fs.unlink(lock);
-          continue;
-        }
-      } catch (statError) {
-        if (statError.code !== 'ENOENT') {
-          throw statError;
-        }
+      if (await removeIfStale(lock)) {
+        continue;
       }
       await sleep(200);
     }
@@ -152,16 +159,18 @@ function normalizeProfile(profile) {
   }
   const normalized = { ...DEFAULT_PROFILE(), ...profile };
   normalized.schemaVersion = Math.max(SCHEMA_VERSION, profile.schemaVersion || 0);
-  normalized.stats = { ...DEFAULT_PROFILE().stats, ...(profile.stats || {}) };
+  // Spreading undefined/null in an object literal is a no-op, so missing
+  // sub-objects safely fall back to the defaults without a `|| {}` guard.
+  normalized.stats = { ...DEFAULT_PROFILE().stats, ...profile.stats };
   normalized.sessionActions = {
     ...DEFAULT_PROFILE().sessionActions,
-    ...(profile.sessionActions || {})
+    ...profile.sessionActions
   };
   normalized.achievements = profile.achievements || [];
   normalized.questMode = profile.questMode ?? false;
   normalized.streaks = {
     ...DEFAULT_PROFILE().streaks,
-    ...(profile.streaks || {})
+    ...profile.streaks
   };
   normalized.lastQuestDay = profile.lastQuestDay ?? null;
   return normalized;

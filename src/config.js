@@ -1,6 +1,6 @@
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
 import { DEFAULT_ACTIONS } from './actions.js';
 
 // Config lives next to the profile so DEVQUEST_HOME redirects both together.
